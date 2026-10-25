@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FUSION Market Monitor OTC</title>
+<style>
+:root{color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f4f5f8;--card:#fff;--tx:#14171f;--mu:#5d6679;--up:#0e8f83;--dn:#d03a37;--ac:#a07d12;--bd:#dfe3ea;--in:#eef0f5;--wb:#fff6d6;--wt:#6b5410}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d0f14;--card:#171b24;--tx:#e6e8ee;--mu:#8b93a7;--up:#26a69a;--dn:#ef5350;--ac:#d4af37;--bd:#262c3a;--in:#10131a;--wb:#2a2410;--wt:#e8d48a}}
+:root[data-theme="dark"]{--bg:#0d0f14;--card:#171b24;--tx:#e6e8ee;--mu:#8b93a7;--up:#26a69a;--dn:#ef5350;--ac:#d4af37;--bd:#262c3a;--in:#10131a;--wb:#2a2410;--wt:#e8d48a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:10px;max-width:1000px}
+h1{font-size:17px;margin:4px 0;color:var(--ac)}h2{font-size:14px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;margin:10px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.badge{padding:3px 10px;border-radius:99px;font-weight:700;font-size:12px;color:#fff;background:#666}
+.b-conectada{background:#1b7a70}.b-aguardando_dados{background:#8a6700}.b-erro{background:#b03030}
+.mu{color:var(--mu);font-size:12px}
+canvas{width:100%;display:block;background:var(--in);border-radius:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.kpi{background:var(--in);border-radius:8px;padding:8px}.kpi b{display:block;font-size:16px}
+.hz{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0;background:var(--card)}.bar i{display:block}
+.lg{display:flex;justify-content:space-between;font-size:12px;font-weight:600}
+.u{color:var(--up)}.d{color:var(--dn)}.n{color:var(--mu)}
+ul{margin:6px 0 0;padding-left:16px;font-size:12px;color:var(--mu)}
+.warn{background:var(--wb);color:var(--wt);border-radius:8px;padding:8px;font-size:12px}
+textarea{width:100%;height:80px;background:var(--in);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px;font:12px monospace}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:7px 12px;font-weight:600;margin:6px 6px 0 0}
+button.s{background:var(--in);color:var(--tx);border:1px solid var(--bd)}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+td,th{padding:3px 4px;text-align:right;border-bottom:1px solid var(--bd)}td:first-child,th:first-child{text-align:left}
+.sc{max-height:240px;overflow:auto}
+select,input:not([type=file]){background:var(--in);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px;font:inherit;max-width:100%}
+</style>
+</head>
+<body>
+<div class="row"><h1 id="ttl">FUSION Market Monitor · M5</h1><span id="badge" class="badge">…</span></div>
+<div class="mu" id="msg"></div><div class="mu" id="upd"></div>
+
+<div class="card"><h2>Fonte de dados</h2>
+<div class="row" style="justify-content:flex-start">
+<select id="src"><option value="manual">Manual (importar)</option><option value="binance">Binance (ao vivo, sem chave)</option><option value="td">Twelve Data (forex, chave grátis)</option></select>
+<select id="sym"></select><input id="cus" placeholder="outro símbolo" size="12">
+<input id="key" type="password" placeholder="chave Twelve Data" size="16"></div>
+<button id="live">Iniciar ao vivo</button><span id="lst" class="mu"></span>
+<div class="mu">Usa candles M5 fechados (o candle em formação é ignorado). São dados de mercado real, não OTC.</div></div>
+
+<div class="card"><canvas id="cv" height="300"></canvas><canvas id="rs" height="90" style="margin-top:6px"></canvas>
+<div class="mu">Amarelo: EMA 9 · Azul: EMA 21 · O gráfico mostra apenas os candles importados.</div></div>
+
+<div class="card"><h2>Indicadores</h2><div class="grid" id="kpi"></div></div>
+
+<div class="card"><h2>Pré-análise das próximas 3 velas</h2>
+<div class="warn">ÍNDICES HEURÍSTICOS: não são probabilidades estatísticas calibradas, nem garantia de resultado, nem recomendação de entrada ou de investimento.</div>
+<div id="ins" class="mu" style="margin:6px 0"></div><div class="hz" id="hz"></div></div>
+
+<div class="card"><h2>Importar candles</h2>
+<input type="file" id="file" accept=".json,.csv,application/json,text/csv">
+<textarea id="ta" placeholder="Cole aqui CSV (time,open,high,low,close) ou JSON {&quot;candles&quot;:[…]}"></textarea>
+<button id="go">Importar texto colado</button><button class="s" id="clr">Limpar dados</button>
+<div id="imp" class="mu" style="margin-top:6px">Mínimo de 30 candles de 5 minutos para a análise. Máximo de 5000 por importação.</div></div>
+
+<div class="card"><h2>Histórico recebido (últimos 30)</h2><div class="sc"><table id="tb"></table></div></div>
+
+<div class="card mu"><b>Sobre este painel:</b> não há conexão com a Polarium; ele analisa os candles importados ou os que o navegador busca na fonte escolhida (Binance ou Twelve Data). A análise roda no seu navegador e os dados ficam salvos nele; a chave da Twelve Data fica só neste aparelho. Preços OTC são gerados pela própria corretora, e indicadores técnicos não têm validade preditiva comprovada neles. Ferramenta educacional, sem recomendação de investimento.</div>
+
+<script>
+const W=[["Médias móveis (EMA9/EMA21)",.35],["Momentum",.25],["Candles (corpo/pavios)",.2],["RSI 14",.2]],DEC=[1,.65,.45],
+LAB=["Vela seguinte","Segunda vela à frente","Terceira vela à frente"],MIN=30;let KEY="fusion.v2:manual:";
+const $=i=>document.getElementById(i),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])),
+f5=x=>x==null?"-":Number(x).toFixed(5),css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim(),
+clamp=(x,a=-1,b=1)=>Math.max(a,Math.min(b,x)),sgn=x=>(x>0)-(x<0),sum=a=>a.reduce((x,y)=>x+y,0);
+let CS=[],LU=null,ERR=null;
+
+/* ---------- armazenamento (por navegador) ---------- */
+function save(){try{localStorage.setItem(KEY,JSON.stringify({c:CS,u:LU}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(d&&Array.isArray(d.c)){CS=d.c;LU=d.u}}catch(e){}}
+
+/* ---------- validação / importação ---------- */
+function parseRows(t){
+ t=t.replace(/^\uFEFF/,"").trim();if(!t)throw new Error("conteúdo vazio");
+ if(t.length>1e6)throw new Error("conteúdo maior que 1 MB");
+ if(t[0]==="{"||t[0]==="["){const o=JSON.parse(t),a=Array.isArray(o)?o:o.candles;if(!Array.isArray(a))throw new Error('esperado {"candles":[…]}');return a}
+ const L=t.split(/\r?\n/).filter(x=>x.trim()),d=(L[0].match(/;/g)||[]).length>(L[0].match(/,/g)||[]).length?";":",",H=L[0].split(d).map(x=>x.trim().toLowerCase());
+ return L.slice(1).map(l=>{const p=l.split(d),o={};H.forEach((h,i)=>o[h]=p[i]);return o})}
+function clean(c){
+ if(!c||typeof c!=="object")throw new Error("item não é um objeto");
+ let ts;const v=c.time;
+ if(typeof v==="number")ts=v>1e11?v:v*1000;
+ else if(typeof v==="string"&&v.trim()){let s=v.trim().replace(" ","T");if(!/(Z|[+-]\d\d:?\d\d)$/.test(s))s+=s.length<=10?"T00:00:00Z":"Z";ts=Date.parse(s)}
+ if(!Number.isFinite(ts))throw new Error("time inválido");
+ const o={};
+ for(const k of["open","high","low","close"]){const x=Number(String(c[k]).trim().replace(",","."));if(c[k]==null||c[k]===""||!Number.isFinite(x)||x<=0)throw new Error(k+" inválido");o[k]=x}
+ if(o.high<Math.max(o.open,o.close,o.low)||o.low>Math.min(o.open,o.close,o.high))throw new Error("OHLC inconsistente (high/low)");
+ o.ts=Math.floor(ts/1000);o.time=new Date(ts).toISOString().slice(0,19);return o}
+function ingest(rows){
+ if(!rows.length)throw new Error("nenhum candle encontrado");
+ if(rows.length>5000)throw new Error("máximo de 5000 candles por importação");
+ const out=[],er=[];
+ for(let i=0;i<rows.length&&er.length<10;i++){try{out.push(clean(rows[i]))}catch(e){er.push("candle "+i+": "+e.message)}}
+ if(er.length)throw new Error(er.join("; "));
+ const m=new Map(CS.map(c=>[c.ts,c]));out.forEach(c=>m.set(c.ts,c));
+ CS=[...m.keys()].sort((a,b)=>a-b).slice(-2000).map(k=>m.get(k));
+ ERR=null;LU=new Date().toISOString().slice(0,19);save();return out.length}
+function doImport(t){
+ try{$("imp").textContent="OK: "+ingest(parseRows(t))+" candles importados."}
+ catch(e){ERR="Última importação rejeitada: "+e.message;$("imp").textContent="Erro: "+e.message}
+ render()}
+
+/* ---------- indicadores ---------- */
+function ema(v,n){const k=2/(n+1);let e=null;return v.map((x,i)=>{if(i<n-1)return null;e=e===null?sum(v.slice(0,n))/n:x*k+e*(1-k);return e})}
+function rsi(v,n=14){
+ const o=Array(v.length).fill(null);if(v.length<=n)return o;let g=0,l=0;
+ for(let i=1;i<=n;i++){const d=v[i]-v[i-1];g+=Math.max(d,0);l+=Math.max(-d,0)}
+ g/=n;l/=n;const rs=()=>l===0?(g===0?50:100):100-100/(1+g/l);o[n]=rs();
+ for(let i=n+1;i<v.length;i++){const d=v[i]-v[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=rs()}
+ return o}
+function shape(c){const r=c.high-c.low;if(r<=0)return[0,0,0];return[sgn(c.close-c.open)*Math.abs(c.close-c.open)/r,(c.high-Math.max(c.open,c.close))/r,(Math.min(c.open,c.close)-c.low)/r]}
+function analyse(cs){
+ const n=cs.length;if(n<MIN)return{ok:false,msg:"Dados insuficientes: "+n+" de "+MIN+" candles necessários."};
+ const cl=cs.map(c=>c.close),e9=ema(cl,9),e21=ema(cl,21),r=rsi(cl),rg=cs.map(c=>c.high-c.low),avg=sum(rg.slice(-14))/14;
+ if(avg<=0)return{ok:false,msg:"Amplitude média zero: dados sem variação."};
+ const rets=[];for(let i=n-20;i<n;i++)rets.push(Math.log(cl[i]/cl[i-1]));
+ const mu=sum(rets)/20,vol=Math.sqrt(sum(rets.map(x=>(x-mu)**2))/19)*100,ratio=(sum(rg.slice(-5))/5)/(sum(rg.slice(-30))/30),mom=cl[n-1]-cl[n-4];
+ const sp=cs.slice(-3).map(shape),mm=i=>sum(sp.map(s=>s[i]))/3,body=mm(0),up=mm(1),lo=mm(2),rv=r[n-1],E9=e9[n-1],E21=e21[n-1];
+ const sc=[.6*Math.tanh(2*(E9-E21)/avg)+.4*Math.tanh(1.5*(E9-e9[n-4])/avg),Math.tanh(mom/avg/1.5),
+  clamp(sum(sp.map(s=>clamp(s[0]+.5*(s[2]-s[1]))))/3),
+  rv>70?.4-(rv-70)/30*1.4:rv<30?-.4+(30-rv)/30*1.4:(rv-50)/20*.4];
+ const det=["EMA9 "+E9.toFixed(5)+(E9>E21?" > ":" ≤ ")+"EMA21 "+E21.toFixed(5),
+  (mom>=0?"+":"")+mom.toFixed(5)+" em 3 candles ("+(mom/avg).toFixed(2)+"× amplitude média)",
+  "corpo "+body.toFixed(2)+", pavio sup. "+up.toFixed(2)+", pavio inf. "+lo.toFixed(2),
+  "RSI "+rv.toFixed(1)+(rv>70?" (sobrecomprado)":rv<30?" (sobrevendido)":"")];
+ const S=sum(sc.map((s,i)=>W[i][1]*s)),conf=Math.abs(sum(sc.filter(s=>Math.abs(s)>=.1).map(sgn)))/4,
+  vx=Math.min(.2,Math.max(0,ratio-1.3)*.3),k=(.5+.5*conf)*1.5;
+ const hz=[0,1,2].map(h=>{const sh=S*DEC[h],wu=Math.max(sh,0)*k,wd=Math.max(-sh,0)*k,t=wu+wd+.3+.12*h+.25*(1-conf)+vx,
+  a=Math.round(1000*wu/t)/10,b=Math.round(1000*wd/t)/10;
+  return{label:LAB[h],alta:a,baixa:b,ind:Math.round((100-a-b)*10)/10,
+   dr:W.map((w,i)=>({n:w[0],d:det[i],l:sc[i]>.1?"alta":sc[i]<-.1?"baixa":"neutra",c:Math.round(1000*w[1]*sc[i]*DEC[h])/1000}))}});
+ const df=[];for(let i=n-10;i<n;i++)df.push(cs[i].ts-cs[i-1].ts);df.sort((a,b)=>a-b);
+ const w=[];if(Math.abs(df[5]-300)>30)w.push("Espaçamento típico entre candles difere de 5 minutos ("+df[5]+"s).");
+ if(vx>0)w.push("Amplitude recente acima do normal: maior incerteza.");
+ return{ok:true,hz,w,conf:conf.toFixed(2),
+  k:[["EMA 9",f5(E9)],["EMA 21",f5(E21)],["RSI 14",rv.toFixed(2)],["Momentum (3c)",mom.toFixed(5)],["Amplitude média",f5(avg)],["Volatilidade %",vol.toFixed(4)],["Confluência",conf.toFixed(2)]]}}
+
+/* ---------- gráfico ---------- */
+function setup(cv){const d=window.devicePixelRatio||1,w=cv.clientWidth,h=+cv.getAttribute("height");cv.width=w*d;cv.height=h*d;const g=cv.getContext("2d");g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,w,h);return[g,w,h]}
+function line(g,a,x,y,col){g.strokeStyle=col;g.lineWidth=1.4;g.beginPath();let s=false;a.forEach((v,i)=>{if(v==null)return;s?g.lineTo(x(i),y(v)):g.moveTo(x(i),y(v));s=true});g.stroke()}
+function draw(){
+ const N=80,cs=CS.slice(-N),[g,w,h]=setup($("cv")),mu=css("--mu"),bd=css("--bd"),up=css("--up"),dn=css("--dn");g.font="10px sans-serif";
+ if(!cs.length){g.fillStyle=mu;g.fillText("Aguardando candles…",10,20);setup($("rs"));return}
+ const cl=CS.map(c=>c.close),a9=ema(cl,9).slice(-N),a21=ema(cl,21).slice(-N),rr=rsi(cl).slice(-N);
+ const vals=cs.flatMap(k=>[k.high,k.low]).concat(a9.filter(v=>v!=null),a21.filter(v=>v!=null));
+ let mn=Math.min(...vals),mx=Math.max(...vals);const pd=(mx-mn)*.05||1e-5;mn-=pd;mx+=pd;
+ const L=cs.length,pw=52,cw=(w-pw)/L,x=i=>i*cw+cw/2,y=v=>h-10-(v-mn)/(mx-mn)*(h-20);
+ g.fillStyle=mu;g.strokeStyle=bd;g.lineWidth=1;
+ for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4,yy=y(v);g.beginPath();g.moveTo(0,yy);g.lineTo(w-pw,yy);g.stroke();g.fillText(v.toFixed(5),w-pw+4,yy+3)}
+ cs.forEach((k,i)=>{const c=k.close>=k.open?up:dn;g.fillStyle=g.strokeStyle=c;g.beginPath();g.moveTo(x(i),y(k.high));g.lineTo(x(i),y(k.low));g.stroke();
+  const t=y(Math.max(k.open,k.close)),b=y(Math.min(k.open,k.close));g.fillRect(x(i)-cw*.35,t,cw*.7,Math.max(1,b-t))});
+ line(g,a9,x,y,css("--ac"));line(g,a21,x,y,"#4aa3ff");
+ const[r,rw,rh]=setup($("rs")),ry=v=>rh-5-v/100*(rh-10);r.font="10px sans-serif";r.fillStyle=mu;r.strokeStyle=bd;
+ [30,70].forEach(v=>{r.beginPath();r.moveTo(0,ry(v));r.lineTo(rw-pw,ry(v));r.stroke();r.fillText(v,rw-pw+4,ry(v)+3)});
+ r.fillText("RSI 14",4,10);line(r,rr,x,ry,"#a66bff")}
+
+/* ---------- tela ---------- */
+function render(){
+ const st=ERR?"erro":!CS.length?"aguardando_dados":"conectada";
+ $("badge").textContent={conectada:"CONECTADA (dados recebidos)",aguardando_dados:"AGUARDANDO DADOS",erro:"ERRO"}[st];$("badge").className="badge b-"+st;
+ $("msg").textContent=ERR||(st==="aguardando_dados"?"Aguardando candles. Importe um arquivo ou cole dados abaixo.":(SRCN()==="manual"?"Dados importados neste navegador. Isto não indica conexão com a Polarium.":"Dados de mercado real recebidos de "+SRCN()+" ("+SYMV()+"). Não são dados OTC da Polarium."));
+ const stale=LU&&(Date.now()-Date.parse(LU+"Z"))>9e5;
+ $("upd").textContent="Última atualização: "+(LU?LU.replace("T"," ")+" UTC":"nunca")+(stale?" (desatualizado)":"")+" · Último candle: "+(CS.length?CS[CS.length-1].time.replace("T"," "):"-")+" · Candles: "+CS.length;
+ draw();const a=analyse(CS);
+ if(!a.ok){$("kpi").innerHTML="";$("hz").innerHTML="";$("ins").textContent=a.msg}
+ else{
+  $("kpi").innerHTML=a.k.map(([n,v])=>'<div class="kpi"><span class="mu">'+n+"</span><b>"+esc(v)+"</b></div>").join("");
+  $("ins").textContent=a.w.join(" ");
+  $("hz").innerHTML=a.hz.map(h=>'<div class="kpi"><b>'+esc(h.label)+'</b><div class="bar"><i style="width:'+h.alta+'%;background:var(--up)"></i><i style="width:'+h.ind+'%;background:var(--mu);opacity:.5"></i><i style="width:'+h.baixa+'%;background:var(--dn)"></i></div>'+
+   '<div class="lg"><span class="u">Alta '+h.alta+'</span><span class="n">Indef. '+h.ind+'</span><span class="d">Baixa '+h.baixa+"</span></div><ul>"+
+   h.dr.map(d=>'<li><span class="'+(d.l==="alta"?"u":d.l==="baixa"?"d":"n")+'">'+esc(d.n)+": "+d.l+" ("+(d.c>0?"+":"")+d.c+")</span><br>"+esc(d.d)+"</li>").join("")+"</ul></div>").join("")}
+ $("tb").innerHTML="<tr><th>Hora</th><th>O</th><th>H</th><th>L</th><th>C</th></tr>"+CS.slice(-30).reverse().map(k=>"<tr><td>"+esc(k.time.replace("T"," "))+"</td><td>"+f5(k.open)+"</td><td>"+f5(k.high)+"</td><td>"+f5(k.low)+"</td><td>"+f5(k.close)+"</td></tr>").join("")}
+
+$("file").onchange=async e=>{const f=e.target.files[0];if(f)doImport(await f.text());e.target.value=""};
+$("go").onclick=()=>{doImport($("ta").value);$("ta").value=""};
+$("clr").onclick=()=>{CS=[];LU=null;ERR=null;save();$("imp").textContent="Dados apagados.";render()};
+addEventListener("resize",render);matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
+const PRE={binance:["EURUSDT","BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"],td:["EUR/USD","GBP/USD","USD/JPY","AUD/USD","XAU/USD"],manual:["EUR/USD OTC"]};
+let TM=null;
+const SRCN=()=>$("src").value,SYMV=()=>$("cus").value.trim()||$("sym").value;
+function fill(){$("sym").innerHTML=PRE[SRCN()].map(s=>"<option>"+s+"</option>").join("");$("key").style.display=SRCN()==="td"?"":"none";$("live").style.display=SRCN()==="manual"?"none":"";$("cus").value=""}
+function stop(){clearInterval(TM);TM=null;$("live").textContent="Iniciar ao vivo";$("lst").textContent=""}
+function switchAsset(){stop();KEY="fusion.v2:"+SRCN()+":"+SYMV();CS=[];LU=null;ERR=null;load();$("ttl").textContent="FUSION Market Monitor · "+SYMV()+" · M5";render()}
+async function pull(){
+ const s=SRCN(),y=SYMV();let rows;
+ if(s==="binance"){
+  const r=await fetch("https://data-api.binance.vision/api/v3/klines?symbol="+encodeURIComponent(y.toUpperCase().replace("/",""))+"&interval=5m&limit=300");
+  if(!r.ok)throw new Error("Binance respondeu "+r.status+" (confira o símbolo)");
+  rows=(await r.json()).map(k=>({time:k[0],open:k[1],high:k[2],low:k[3],close:k[4]}))
+ }else{
+  const kk=$("key").value.trim();if(!kk)throw new Error("informe a chave da Twelve Data");
+  const r=await fetch("https://api.twelvedata.com/time_series?symbol="+encodeURIComponent(y)+"&interval=5min&outputsize=300&timezone=UTC&apikey="+encodeURIComponent(kk));
+  const d=await r.json();if(d.status==="error"||!Array.isArray(d.values))throw new Error(d.message||"resposta inesperada da Twelve Data");
+  rows=d.values.map(v=>({time:v.datetime,open:v.open,high:v.high,low:v.low,close:v.close}))
+ }
+ const t=x=>typeof x==="number"?x:Date.parse(x.replace(" ","T")+"Z");
+ return ingest(rows.filter(c=>t(c.time)+3e5<=Date.now()))}
+async function tick(){try{const n=await pull();$("lst").textContent=" Ao vivo · "+n+" candles lidos · "+new Date().toLocaleTimeString()}catch(e){ERR="Falha ao buscar dados: "+e.message;$("lst").textContent=""}render()}
+$("live").onclick=()=>{if(TM){stop();return}try{localStorage.setItem("fusion.tdkey",$("key").value.trim())}catch(e){}$("live").textContent="Parar";tick();TM=setInterval(tick,SRCN()==="td"?120000:15000)};
+$("src").onchange=()=>{fill();switchAsset()};$("sym").onchange=switchAsset;$("cus").onchange=switchAsset;
+fill();try{$("key").value=localStorage.getItem("fusion.tdkey")||""}catch(e){}
+switchAsset();setInterval(render,30000);
+</script>
+</body>
+</html>
